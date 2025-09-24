@@ -31,15 +31,3 @@ require (
 	golang.org/x/text v0.29.0 // indirect
 	golang.org/x/tools v0.37.0 // indirect
 )
-
-replace (
-	github.com/zishang520/socket.io/adapters/adapter/v3 => ../../socket.io/adapters/adapter
-	github.com/zishang520/socket.io/adapters/redis/v3 => ../../socket.io/adapters/redis
-	github.com/zishang520/socket.io/clients/engine/v3 => ../../socket.io/clients/engine
-	github.com/zishang520/socket.io/clients/socket/v3 => ../../socket.io/clients/socket
-	github.com/zishang520/socket.io/parsers/engine/v3 => ../../socket.io/parsers/engine
-	github.com/zishang520/socket.io/parsers/socket/v3 => ../../socket.io/parsers/socket
-	github.com/zishang520/socket.io/servers/engine/v3 => ../../socket.io/servers/engine
-	github.com/zishang520/socket.io/servers/socket/v3 => ../../socket.io/servers/socket
-	github.com/zishang520/socket.io/v3 => ../../socket.io/
-)
