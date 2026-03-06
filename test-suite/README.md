@@ -32,7 +32,7 @@ The tests cover both **HTTP long-polling** and **WebSocket** transports (see `te
 
 ## Requirements
 
-* Go 1.25+
+* Go 1.26.0+
 
 ---
 
