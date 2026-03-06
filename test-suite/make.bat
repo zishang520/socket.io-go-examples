@@ -1,10 +1,10 @@
 @echo OFF
+:: Configuration
+set "GOPROXY=https://proxy.golang.org,direct"
 
 set "args=%1"
 pushd "%~dp0"
 setlocal ENABLEDELAYEDEXPANSION
-rem Set the GOPROXY environment variable
-Set GOPROXY=https://goproxy.io,direct
 Set DEBUG=*
 
 if /i "%args%"=="default" goto %args%
