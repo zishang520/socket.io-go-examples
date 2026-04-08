@@ -32,7 +32,7 @@ func Socket(addr string) *socket.Server {
 }
 
 func main() {
-	log.DEBUG = true
+	log.DEBUG.Store(true)
 
 	io := Socket(":3000")
 
