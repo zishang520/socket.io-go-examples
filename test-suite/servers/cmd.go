@@ -19,8 +19,7 @@ func Socket(addr string) *socket.Server {
 	config.SetMaxHttpBufferSize(1000000)
 	config.SetConnectTimeout(1000 * time.Millisecond)
 	config.SetCors(&types.Cors{
-		Origin:      "*",
-		Credentials: true,
+		Origin: "*",
 	})
 
 	httpServer := types.NewWebServer(nil)
@@ -37,7 +36,13 @@ func main() {
 	io := Socket(":3000")
 
 	io.On("connection", func(clients ...any) {
-		client := clients[0].(*socket.Socket)
+		if len(clients) == 0 {
+			return
+		}
+		client, ok := clients[0].(*socket.Socket)
+		if !ok {
+			return
+		}
 
 		defer client.Emit("auth", client.Handshake().Auth)
 
@@ -55,14 +60,19 @@ func main() {
 	})
 
 	io.Of("/custom", nil).On("connection", func(clients ...any) {
-		client := clients[0].(*socket.Socket)
+		if len(clients) == 0 {
+			return
+		}
+		client, ok := clients[0].(*socket.Socket)
+		if !ok {
+			return
+		}
 		defer client.Emit("auth", client.Handshake().Auth)
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-
 	defer stop()
+
 	<-ctx.Done()
 	io.Close(nil)
-	os.Exit(0)
 }

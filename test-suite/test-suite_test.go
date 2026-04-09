@@ -21,7 +21,7 @@ const (
 	PING_TIMEOUT  = 200
 )
 
-func waitFor(c *websocket.Conn, ctx context.Context) (string, error) {
+func waitFor(ctx context.Context, c *websocket.Conn) (string, error) {
 	_, data, err := c.Read(ctx)
 	if err != nil {
 		return "", err
@@ -29,7 +29,7 @@ func waitFor(c *websocket.Conn, ctx context.Context) (string, error) {
 	return string(data), nil
 }
 
-func waitForPackets(c *websocket.Conn, ctx context.Context, count int) ([]any, error) {
+func waitForPackets(ctx context.Context, c *websocket.Conn, count int) ([]any, error) {
 	packets := make([]any, 0, count)
 
 	for len(packets) < count {
@@ -66,6 +66,9 @@ func initLongPollingSession(t *testing.T) string {
 	}
 
 	content := string(body)
+	if len(content) < 2 {
+		t.Fatalf("unexpected response: %q", content)
+	}
 	var val map[string]any
 	if err := json.Unmarshal([]byte(content[1:]), &val); err != nil {
 		t.Fatalf("json unmarshal: %v", err)
@@ -88,7 +91,7 @@ func initSocketIOConnection(t *testing.T) *websocket.Conn {
 	}
 
 	// Engine.IO handshake
-	_, err = waitFor(c, ctx)
+	_, err = waitFor(ctx, c)
 	if err != nil {
 		t.Fatalf("failed to read handshake: %v", err)
 	}
@@ -99,13 +102,13 @@ func initSocketIOConnection(t *testing.T) *websocket.Conn {
 	}
 
 	// Socket.IO handshake
-	_, err = waitFor(c, ctx)
+	_, err = waitFor(ctx, c)
 	if err != nil {
 		t.Fatalf("failed to read socket.io handshake: %v", err)
 	}
 
 	// "auth" packet
-	_, err = waitFor(c, ctx)
+	_, err = waitFor(ctx, c)
 	if err != nil {
 		t.Fatalf("failed to read auth packet: %v", err)
 	}
@@ -255,7 +258,7 @@ func TestEngineIOHandshake(t *testing.T) {
 			}
 			defer c.Close(websocket.StatusNormalClosure, "")
 
-			data, err := waitFor(c, ctx)
+			data, err := waitFor(ctx, c)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -415,13 +418,13 @@ func TestEngineIOHeartbeat(t *testing.T) {
 			defer c.Close(websocket.StatusNormalClosure, "")
 
 			// handshake
-			_, err = waitFor(c, ctx)
+			_, err = waitFor(ctx, c)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			for range 3 {
-				data, err := waitFor(c, ctx)
+				data, err := waitFor(ctx, c)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -550,7 +553,7 @@ func TestEngineIOClose(t *testing.T) {
 			}
 
 			// handshake
-			_, err = waitFor(c, ctx)
+			_, err = waitFor(ctx, c)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -592,7 +595,7 @@ func TestEngineIOUpgrade(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		probeResponse, err := waitFor(c, ctx)
+		probeResponse, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -627,7 +630,7 @@ func TestEngineIOUpgrade(t *testing.T) {
 		}
 
 		// Wait for probe response
-		probeResp, err := waitFor(c, ctx)
+		probeResp, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -710,7 +713,7 @@ func TestSocketIOConnect(t *testing.T) {
 		defer c.Close(websocket.StatusNormalClosure, "")
 
 		// Engine.IO handshake
-		_, err = waitFor(c, ctx)
+		_, err = waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -720,7 +723,7 @@ func TestSocketIOConnect(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		data, err := waitFor(c, ctx)
+		data, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -742,7 +745,7 @@ func TestSocketIOConnect(t *testing.T) {
 			t.Fatal("sid should be a string")
 		}
 
-		authPacket, err := waitFor(c, ctx)
+		authPacket, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -763,7 +766,7 @@ func TestSocketIOConnect(t *testing.T) {
 		defer c.Close(websocket.StatusNormalClosure, "")
 
 		// Engine.IO handshake
-		_, err = waitFor(c, ctx)
+		_, err = waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -773,7 +776,7 @@ func TestSocketIOConnect(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		data, err := waitFor(c, ctx)
+		data, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -795,7 +798,7 @@ func TestSocketIOConnect(t *testing.T) {
 			t.Fatal("sid should be a string")
 		}
 
-		authPacket, err := waitFor(c, ctx)
+		authPacket, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -816,7 +819,7 @@ func TestSocketIOConnect(t *testing.T) {
 		defer c.Close(websocket.StatusNormalClosure, "")
 
 		// Engine.IO handshake
-		_, err = waitFor(c, ctx)
+		_, err = waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -826,7 +829,7 @@ func TestSocketIOConnect(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		data, err := waitFor(c, ctx)
+		data, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -848,7 +851,7 @@ func TestSocketIOConnect(t *testing.T) {
 			t.Fatal("sid should be a string")
 		}
 
-		authPacket, err := waitFor(c, ctx)
+		authPacket, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -869,7 +872,7 @@ func TestSocketIOConnect(t *testing.T) {
 		defer c.Close(websocket.StatusNormalClosure, "")
 
 		// Engine.IO handshake
-		_, err = waitFor(c, ctx)
+		_, err = waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -879,7 +882,7 @@ func TestSocketIOConnect(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		data, err := waitFor(c, ctx)
+		data, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -901,7 +904,7 @@ func TestSocketIOConnect(t *testing.T) {
 			t.Fatal("sid should be a string")
 		}
 
-		authPacket, err := waitFor(c, ctx)
+		authPacket, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -922,7 +925,7 @@ func TestSocketIOConnect(t *testing.T) {
 		defer c.Close(websocket.StatusNormalClosure, "")
 
 		// Engine.IO handshake
-		_, err = waitFor(c, ctx)
+		_, err = waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -932,7 +935,7 @@ func TestSocketIOConnect(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		data, err := waitFor(c, ctx)
+		data, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -950,9 +953,10 @@ func TestSocketIOConnect(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer c.Close(websocket.StatusNormalClosure, "")
 
 		// Engine.IO handshake
-		_, err = waitFor(c, ctx)
+		_, err = waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -980,6 +984,7 @@ func TestSocketIOConnect(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer c.Close(websocket.StatusNormalClosure, "")
 
 		// Don't send any handshake, just wait for close
 		for {
@@ -1005,7 +1010,7 @@ func TestSocketIODisconnect(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		data, err := waitFor(c, ctx)
+		data, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1023,7 +1028,7 @@ func TestSocketIODisconnect(t *testing.T) {
 		defer c.Close(websocket.StatusNormalClosure, "")
 
 		// Wait for ping
-		_, err := waitFor(c, ctx)
+		_, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1035,13 +1040,13 @@ func TestSocketIODisconnect(t *testing.T) {
 		}
 
 		// Socket.IO handshake for custom namespace
-		_, err = waitFor(c, ctx)
+		_, err = waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// auth packet for custom namespace
-		_, err = waitFor(c, ctx)
+		_, err = waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1058,7 +1063,7 @@ func TestSocketIODisconnect(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		data, err := waitFor(c, ctx)
+		data, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1082,7 +1087,7 @@ func TestSocketIOMessage(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		data, err := waitFor(c, ctx)
+		data, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1118,7 +1123,7 @@ func TestSocketIOMessage(t *testing.T) {
 		}
 
 		// Wait for 3 packets in response
-		packets, err := waitForPackets(c, ctx, 3)
+		packets, err := waitForPackets(ctx, c, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1158,7 +1163,7 @@ func TestSocketIOMessage(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		data, err := waitFor(c, ctx)
+		data, err := waitFor(ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1194,7 +1199,7 @@ func TestSocketIOMessage(t *testing.T) {
 		}
 
 		// Wait for 3 packets in response (ack + binary attachments)
-		packets, err := waitForPackets(c, ctx, 3)
+		packets, err := waitForPackets(ctx, c, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1227,6 +1232,7 @@ func TestSocketIOMessage(t *testing.T) {
 		defer cancel()
 
 		c := initSocketIOConnection(t)
+		defer c.Close(websocket.StatusNormalClosure, "")
 
 		err := c.Write(ctx, websocket.MessageText, []byte("4abc"))
 		if err != nil {
@@ -1248,6 +1254,7 @@ func TestSocketIOMessage(t *testing.T) {
 		defer cancel()
 
 		c := initSocketIOConnection(t)
+		defer c.Close(websocket.StatusNormalClosure, "")
 
 		err := c.Write(ctx, websocket.MessageText, []byte("42{}"))
 		if err != nil {
@@ -1269,6 +1276,7 @@ func TestSocketIOMessage(t *testing.T) {
 		defer cancel()
 
 		c := initSocketIOConnection(t)
+		defer c.Close(websocket.StatusNormalClosure, "")
 
 		err := c.Write(ctx, websocket.MessageText, []byte(`42abc["message-with-ack",1,"2",{"3":[false]}]`))
 		if err != nil {
