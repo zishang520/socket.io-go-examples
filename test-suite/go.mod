@@ -23,8 +23,8 @@ require (
 	github.com/zishang520/socket.io/parsers/engine/v3 v3.0.0-rc.14 // indirect
 	github.com/zishang520/socket.io/parsers/socket/v3 v3.0.0-rc.14 // indirect
 	github.com/zishang520/socket.io/servers/engine/v3 v3.0.0-rc.14 // indirect
-	golang.org/x/crypto v0.49.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 )
