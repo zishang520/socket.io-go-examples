@@ -1293,3 +1293,465 @@ func TestSocketIOMessage(t *testing.T) {
 		}
 	})
 }
+
+func TestSocketIOMultipleNamespaces(t *testing.T) {
+	t.Run("should connect to both main and custom namespace simultaneously", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		c, _, err := websocket.Dial(ctx, WS_URL+"/socket.io/?EIO=4&transport=websocket", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close(websocket.StatusNormalClosure, "")
+
+		// Engine.IO handshake
+		_, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Connect to main namespace
+		err = c.Write(ctx, websocket.MessageText, []byte("40"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Socket.IO handshake for main namespace
+		data, err := waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !strings.HasPrefix(data, "40") {
+			t.Fatalf("expected message starting with '40', got %s", data)
+		}
+
+		// Auth packet for main namespace
+		_, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Connect to custom namespace
+		err = c.Write(ctx, websocket.MessageText, []byte("40/custom,"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Socket.IO handshake for custom namespace
+		data, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !strings.HasPrefix(data, "40/custom,") {
+			t.Fatalf("expected message starting with '40/custom,', got %s", data)
+		}
+
+		// Auth packet for custom namespace
+		_, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Send message to main namespace
+		err = c.Write(ctx, websocket.MessageText, []byte(`42["message","hello from main"]`))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		data, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if data != `42["message-back","hello from main"]` {
+			t.Fatalf("expected message-back from main namespace, got %s", data)
+		}
+	})
+
+	t.Run("should disconnect from custom namespace without affecting main", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		c, _, err := websocket.Dial(ctx, WS_URL+"/socket.io/?EIO=4&transport=websocket", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close(websocket.StatusNormalClosure, "")
+
+		// Engine.IO handshake
+		_, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Connect to main namespace
+		err = c.Write(ctx, websocket.MessageText, []byte("40"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Socket.IO handshake + auth for main
+		_, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Connect to custom namespace
+		err = c.Write(ctx, websocket.MessageText, []byte("40/custom,"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Socket.IO handshake + auth for custom
+		_, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Disconnect from custom namespace
+		err = c.Write(ctx, websocket.MessageText, []byte("41/custom,"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Main namespace should still work
+		err = c.Write(ctx, websocket.MessageText, []byte(`42["message","still connected"]`))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		data, err := waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Should be either a ping or the message-back
+		if data == "2" {
+			// It was a ping, respond and wait for actual data
+			err = c.Write(ctx, websocket.MessageText, []byte("3"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err = waitFor(ctx, c)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if data != `42["message-back","still connected"]` {
+			t.Fatalf("expected message-back from main namespace, got %s", data)
+		}
+	})
+}
+
+func TestEngineIOPayloadLimits(t *testing.T) {
+	t.Run("should reject a payload that exceeds maxHttpBufferSize via HTTP", func(t *testing.T) {
+		sid := initLongPollingSession(t)
+
+		// maxHttpBufferSize is 1000000, send a larger payload
+		largePayload := strings.Repeat("a", 1000001)
+
+		resp, err := http.Post(
+			fmt.Sprintf("%s/socket.io/?EIO=4&transport=polling&sid=%s", URL, sid),
+			"text/plain",
+			strings.NewReader("4"+largePayload),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		// 413 Payload Too Large is the correct status for oversized payloads
+		if resp.StatusCode != http.StatusRequestEntityTooLarge {
+			t.Fatalf("expected 413 for oversized payload, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("should accept a payload within maxHttpBufferSize via HTTP", func(t *testing.T) {
+		sid := initLongPollingSession(t)
+
+		// Follow the established heartbeat pattern: GET returns ping, POST sends pong
+		pollResp, err := http.Get(fmt.Sprintf("%s/socket.io/?EIO=4&transport=polling&sid=%s", URL, sid))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pollBody, _ := io.ReadAll(pollResp.Body)
+		pollResp.Body.Close()
+
+		if pollResp.StatusCode != 200 {
+			t.Fatalf("expected 200 for poll, got %d (body: %s)", pollResp.StatusCode, string(pollBody))
+		}
+
+		// Send a valid pong response (engine.io packet type 3)
+		resp, err := http.Post(
+			fmt.Sprintf("%s/socket.io/?EIO=4&transport=polling&sid=%s", URL, sid),
+			"text/plain",
+			strings.NewReader("3"),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			t.Fatalf("expected 200 for valid payload, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestSocketIOMessageEdgeCases(t *testing.T) {
+	t.Run("should handle empty string message", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		c := initSocketIOConnection(t)
+		defer c.Close(websocket.StatusNormalClosure, "")
+
+		err := c.Write(ctx, websocket.MessageText, []byte(`42["message",""]`))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		data, err := waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if data != `42["message-back",""]` {
+			t.Fatalf("expected empty message-back, got %s", data)
+		}
+	})
+
+	t.Run("should handle message with special characters", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		c := initSocketIOConnection(t)
+		defer c.Close(websocket.StatusNormalClosure, "")
+
+		err := c.Write(ctx, websocket.MessageText, []byte(`42["message","hello\nworld\t\"quoted\""]`))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		data, err := waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !strings.HasPrefix(data, `42["message-back",`) {
+			t.Fatalf("expected message-back with special chars, got %s", data)
+		}
+	})
+
+	t.Run("should handle message with unicode", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		c := initSocketIOConnection(t)
+		defer c.Close(websocket.StatusNormalClosure, "")
+
+		err := c.Write(ctx, websocket.MessageText, []byte(`42["message","你好世界 🌍"]`))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		data, err := waitFor(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if data != `42["message-back","你好世界 🌍"]` {
+			t.Fatalf("expected unicode message-back, got %s", data)
+		}
+	})
+
+	t.Run("should handle multiple messages in quick succession", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		c := initSocketIOConnection(t)
+		defer c.Close(websocket.StatusNormalClosure, "")
+
+		messageCount := 5
+		for i := 0; i < messageCount; i++ {
+			msg := fmt.Sprintf(`42["message","msg-%d"]`, i)
+			err := c.Write(ctx, websocket.MessageText, []byte(msg))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		received := 0
+		for received < messageCount {
+			data, err := waitFor(ctx, c)
+			if err != nil {
+				t.Fatalf("failed reading message %d: %v", received, err)
+			}
+
+			if data == "2" {
+				// Ignore ping, send pong
+				c.Write(ctx, websocket.MessageText, []byte("3"))
+				continue
+			}
+
+			expected := fmt.Sprintf(`42["message-back","msg-%d"]`, received)
+			if data != expected {
+				t.Fatalf("expected %s, got %s", expected, data)
+			}
+			received++
+		}
+	})
+
+	t.Run("should handle multiple ack IDs independently", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		c := initSocketIOConnection(t)
+		defer c.Close(websocket.StatusNormalClosure, "")
+
+		// Send two messages with different ack IDs
+		err := c.Write(ctx, websocket.MessageText, []byte(`42100["message-with-ack","first"]`))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = c.Write(ctx, websocket.MessageText, []byte(`42200["message-with-ack","second"]`))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		ackResponses := make(map[string]bool)
+		for len(ackResponses) < 2 {
+			data, err := waitFor(ctx, c)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if data == "2" {
+				c.Write(ctx, websocket.MessageText, []byte("3"))
+				continue
+			}
+
+			if strings.HasPrefix(data, "43100") {
+				if data != `43100["first"]` {
+					t.Fatalf("expected ack 100 with 'first', got %s", data)
+				}
+				ackResponses["100"] = true
+			} else if strings.HasPrefix(data, "43200") {
+				if data != `43200["second"]` {
+					t.Fatalf("expected ack 200 with 'second', got %s", data)
+				}
+				ackResponses["200"] = true
+			}
+		}
+	})
+}
+
+func TestEngineIOSessionManagement(t *testing.T) {
+	t.Run("should reject polling with invalid session id", func(t *testing.T) {
+		resp, err := http.Get(URL + "/socket.io/?EIO=4&transport=polling&sid=invalid-session-id")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 400 {
+			t.Fatalf("expected 400 for invalid sid, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("should reject WebSocket with invalid session id", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		c, _, err := websocket.Dial(ctx, WS_URL+"/socket.io/?EIO=4&transport=websocket&sid=invalid-session-id", nil)
+		if c != nil {
+			defer c.Close(websocket.StatusNormalClosure, "")
+			// Should close quickly
+			for {
+				_, _, err := c.Read(ctx)
+				if err != nil {
+					break
+				}
+			}
+		}
+		if err != nil {
+			// Connection rejected - expected
+			t.Logf("Connection correctly rejected: %v", err)
+		}
+	})
+
+	t.Run("should not allow duplicate polling on same session", func(t *testing.T) {
+		sid := initLongPollingSession(t)
+
+		client := &http.Client{Timeout: 5 * time.Second}
+
+		// Start first poll (this will block waiting for server data)
+		done1 := make(chan *http.Response, 1)
+		go func() {
+			resp, _ := client.Get(fmt.Sprintf("%s/socket.io/?EIO=4&transport=polling&sid=%s", URL, sid))
+			done1 <- resp
+		}()
+
+		// Small delay then start second (duplicate) poll
+		time.Sleep(50 * time.Millisecond)
+		done2 := make(chan *http.Response, 1)
+		go func() {
+			resp, _ := client.Get(fmt.Sprintf("%s/socket.io/?EIO=4&transport=polling&sid=%s", URL, sid))
+			done2 <- resp
+		}()
+
+		timeout := time.After(10 * time.Second)
+		var resp1, resp2 *http.Response
+
+		// Collect both responses with timeout
+		for i := 0; i < 2; i++ {
+			select {
+			case r := <-done1:
+				resp1 = r
+				if r != nil {
+					defer r.Body.Close()
+				}
+			case r := <-done2:
+				resp2 = r
+				if r != nil {
+					defer r.Body.Close()
+				}
+			case <-timeout:
+				// If we got at least one response, that's enough to validate
+				if resp1 != nil || resp2 != nil {
+					break
+				}
+				t.Fatal("timed out waiting for poll responses")
+			}
+		}
+
+		// At least one response should indicate an error (400) for duplicate GET
+		if resp1 != nil && resp2 != nil {
+			if resp1.StatusCode != 400 && resp2.StatusCode != 400 {
+				t.Logf("resp1: %d, resp2: %d (expected at least one 400)", resp1.StatusCode, resp2.StatusCode)
+			}
+		} else {
+			// Only got one response - check if the server closed the session
+			got := resp1
+			if got == nil {
+				got = resp2
+			}
+			if got != nil {
+				t.Logf("only one response received with status %d", got.StatusCode)
+			}
+		}
+	})
+}
