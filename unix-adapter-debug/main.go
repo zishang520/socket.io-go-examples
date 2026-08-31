@@ -35,13 +35,13 @@ func run() error {
 	defer cancel()
 
 	basePath := filepath.Join(directory, "socket.io")
-	receiver, err := unix.NewUnixClient(ctx, basePath)
+	receiver, err := unix.NewUnixClient(ctx, basePath, nil)
 	if err != nil {
 		return err
 	}
 	defer receiver.Close()
 
-	publisher, err := unix.NewUnixClient(ctx, basePath)
+	publisher, err := unix.NewUnixClient(ctx, basePath, nil)
 	if err != nil {
 		return err
 	}
