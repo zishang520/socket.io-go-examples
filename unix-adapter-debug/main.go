@@ -73,7 +73,7 @@ func receiveEvent(
 	wantText string,
 	wantBinary []byte,
 ) error {
-	payload, _, err := receiver.ReadMessage()
+	payload, err := receiver.ReadMessage()
 	if err != nil {
 		return err
 	}
