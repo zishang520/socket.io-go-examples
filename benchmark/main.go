@@ -19,8 +19,8 @@ import (
 func main() {
 	// Enable PPROF
 	go func() {
-		log.Println("Starting PPROF on :6060. View memory with `go tool pprof http://localhost:6060/debug/pprof/heap`")
-		log.Println(http.ListenAndServe("localhost:6060", nil))
+		log.Println("Starting PPROF on 127.0.0.1:6060. View memory with `go tool pprof http://127.0.0.1:6060/debug/pprof/heap`")
+		log.Println(http.ListenAndServe("127.0.0.1:6060", nil))
 	}()
 
 	// Setup Server
@@ -37,12 +37,12 @@ func main() {
 	})
 
 	httpServer := &http.Server{
-		Addr:    ":3000",
+		Addr:    "127.0.0.1:3000",
 		Handler: srv.ServeHandler(nil),
 	}
 
 	go func() {
-		log.Println("Starting Target Server on :3000")
+		log.Println("Starting Target Server on 127.0.0.1:3000")
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
@@ -75,7 +75,7 @@ func main() {
 			for i := int32(0); i < maxConns; i++ {
 				atomic.AddInt32(&activeConns, 1)
 
-				manager := io_client.NewManager("http://localhost:3000", nil)
+				manager := io_client.NewManager("http://127.0.0.1:3000", nil)
 				client := manager.Socket("/", nil)
 				client.On("connect", func(...any) {
 					// emit data and ask for ack, then disconnect

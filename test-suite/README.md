@@ -10,6 +10,8 @@ Make sure you are in the project root, then run:
 go run servers/cmd.go
 ````
 
+The test server listens only on `127.0.0.1:3000`.
+
 ---
 
 ### 2. Run the Test Suite
@@ -43,5 +45,5 @@ The tests cover both **HTTP long-polling** and **WebSocket** transports (see `te
   You can verify with:
 
 ```bash
-curl http://localhost:3000
+curl http://127.0.0.1:3000
 ```

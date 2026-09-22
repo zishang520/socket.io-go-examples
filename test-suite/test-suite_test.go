@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	URL           = "http://localhost:3000"
-	WS_URL        = "ws://localhost:3000"
+	URL           = "http://127.0.0.1:3000"
+	WS_URL        = "ws://127.0.0.1:3000"
 	PING_INTERVAL = 300
 	PING_TIMEOUT  = 200
 )

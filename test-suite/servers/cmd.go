@@ -33,7 +33,7 @@ func Socket(addr string) *socket.Server {
 func main() {
 	log.DEBUG.Store(true)
 
-	io := Socket(":3000")
+	io := Socket("127.0.0.1:3000")
 
 	io.On("connection", func(clients ...any) {
 		if len(clients) == 0 {
